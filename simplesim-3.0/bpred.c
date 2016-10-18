@@ -109,6 +109,7 @@ bpred_create(enum bpred_class class,	/* type of predictor to create */
       bpred_dir_create(class, bimod_size, 0, 0, 0);
 
   case BPredTaken:
+  case BPredBTFN:
   case BPredNotTaken:
     /* no other state */
     break;
@@ -165,6 +166,7 @@ bpred_create(enum bpred_class class,	/* type of predictor to create */
     }
 
   case BPredTaken:
+  case BPredBTFN:
   case BPredNotTaken:
     /* no other state */
     break;
@@ -252,6 +254,7 @@ bpred_dir_create (
     break;
 
   case BPredTaken:
+  case BPredBTFN:
   case BPredNotTaken:
     /* no other state */
     break;
@@ -285,6 +288,10 @@ bpred_dir_config(
 
   case BPredTaken:
     fprintf(stream, "pred_dir: %s: predict taken\n", name);
+    break;
+  
+  case BPredBTFN:
+    fprintf(stream, "pred_dir: %s: predict BTFN\n", name);
     break;
 
   case BPredNotTaken:
@@ -328,6 +335,10 @@ bpred_config(struct bpred_t *pred,	/* branch predictor instance */
   case BPredTaken:
     bpred_dir_config (pred->dirpred.bimod, "taken", stream);
     break;
+  case BPredBTFN:
+    bpred_dir_config (pred->dirpred.bimod, "BTFN", stream);
+    break;
+
   case BPredNotTaken:
     bpred_dir_config (pred->dirpred.bimod, "nottaken", stream);
     break;
@@ -369,6 +380,9 @@ bpred_reg_stats(struct bpred_t *pred,	/* branch predictor instance */
       break;
     case BPredTaken:
       name = "bpred_taken";
+      break;
+    case BPredBTFN:
+      name = "bpred_btfn";
       break;
     case BPredNotTaken:
       name = "bpred_nottaken";
@@ -534,6 +548,7 @@ bpred_dir_lookup(struct bpred_dir_t *pred_dir,	/* branch dir predictor inst */
       p = &pred_dir->config.bimod.table[BIMOD_HASH(pred_dir, baddr)];
       break;
     case BPredTaken:
+    case BPredBTFN:
     case BPredNotTaken:
       break;
     default:
@@ -615,9 +630,18 @@ bpred_lookup(struct bpred_t *pred,	/* branch predictor instance */
 	  dir_update_ptr->pdir1 =
 	    bpred_dir_lookup (pred->dirpred.bimod, baddr);
 	}
-      break;
+      break; 
     case BPredTaken:
       return btarget;
+    case BPredBTFN:
+      if (baddr > btarget)
+        {
+	  return btarget;
+        }
+      else
+        {
+	  return baddr + sizeof(md_inst_t);
+        }
     case BPredNotTaken:
       if ((MD_OP_FLAGS(op) & (F_CTRL|F_UNCOND)) != (F_CTRL|F_UNCOND))
 	{
