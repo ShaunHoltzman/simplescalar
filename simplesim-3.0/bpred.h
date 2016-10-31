@@ -104,8 +104,12 @@ enum bpred_class {
   BPred2bit,			/* 2-bit saturating cntr pred (dir mapped) */
   BPredTaken,			/* static predict taken */
   BPredNotTaken,		/* static predict not taken */
-  BPred_NUM,
-  BPredBTFN			/*Branch Forward Not Taken*/
+  BPredBTFN,			/* Branch Forward Not Taken */
+  BPredTourn,                   /* Tournament branch predictor */
+  BPredGlobal,
+  BPredLocal,
+  BPredSel,
+  BPred_NUM
 };
 
 /* an entry in a BTB */
@@ -132,8 +136,26 @@ struct bpred_dir_t {
       int *shiftregs;		/* level-1 history table */
       unsigned char *l2table;	/* level-2 prediction state table */
     } two;
+    struct {
+      int global_regsize; /*size of global branch history register */
+      int shiftreg_global; /* global branch history table */
+      unsigned char *global_table; /* global prediction state table */
+      int optional; /* optional */
+    } global_pred;
+    struct {
+      int local_htb_size; /* size of the history table for local branch history registers */
+      int local_hrsize; /* size of each local branch history registers */
+      int *shiftregs_local; /* local branch history table */
+      unsigned char *local_table; /* local prediction state table */
+    } local_pred;
+    struct {
+      int sel_size; /* selector size, num of 2-bit selector entries */
+      unsigned char *sel_table; /* selector prediction state table */
+    } selector;
   } config;
 };
+
+
 
 /* branch predictor def */
 struct bpred_t {
@@ -141,6 +163,9 @@ struct bpred_t {
   struct {
     struct bpred_dir_t *bimod;	  /* first direction predictor */
     struct bpred_dir_t *twolev;	  /* second direction predictor */
+    struct bpred_dir_t *global_pred; /* global predictor */
+    struct bpred_dir_t *local_pred;  /* local predictor */
+    struct bpred_dir_t *selector;  /* selector */
     struct bpred_dir_t *meta;	  /* meta predictor */
   } dirpred;
 
@@ -162,6 +187,10 @@ struct bpred_t {
   counter_t used_ras;		/* num RAS predictions used */
   counter_t used_bimod;		/* num bimodal predictions used (BPredComb) */
   counter_t used_2lev;		/* num 2-level predictions used (BPredComb) */
+
+  counter_t used_local_pred;    /* num local predictions used (BPredTourn) */
+  counter_t used_global_pred;   /* num global predictions used (BPredTourn) */
+
   counter_t jr_hits;		/* num correct addr-predictions for JR's */
   counter_t jr_seen;		/* num JR's seen */
   counter_t jr_non_ras_hits;	/* num correct addr-preds for non-RAS JR's */
@@ -179,10 +208,15 @@ struct bpred_update_t {
   char *pdir1;		/* direction-1 predictor counter */
   char *pdir2;		/* direction-2 predictor counter */
   char *pmeta;		/* meta predictor counter */
+  char *sel_dir;        /* direction to selector counter */
   struct {		/* predicted directions */
     unsigned int ras    : 1;	/* RAS used */
     unsigned int bimod  : 1;    /* bimodal predictor */
     unsigned int twolev : 1;    /* 2-level predictor */
+
+    unsigned int local_pred  : 1; /* local predictor */
+    unsigned int global_pred : 1; /* global predictor */
+
     unsigned int meta   : 1;    /* meta predictor (0..bimod / 1..2lev) */
   } dir;
 };
@@ -198,7 +232,12 @@ bpred_create(enum bpred_class class,	/* type of predictor to create */
 	     unsigned int xor,		/* history xor address flag */
 	     unsigned int btb_sets,	/* number of sets in BTB */ 
 	     unsigned int btb_assoc,	/* BTB associativity */
-	     unsigned int retstack_size);/* num entries in ret-addr stack */
+	     unsigned int retstack_size, /* num entries in ret-addr stack */
+             unsigned int sel_size,      /* num of 2-bit selector entires */
+             unsigned int global_regsize, /* size of global branch history reg */
+             unsigned int local_htb_size, /* size of the history table */
+             unsigned int local_hrsize,   /* size of each local branch register */
+             unsigned int optional);      /* optional */
 
 /* create a branch direction predictor */
 struct bpred_dir_t *		/* branch direction predictor instance */
@@ -207,7 +246,12 @@ bpred_dir_create (
   unsigned int l1size,		/* level-1 table size */
   unsigned int l2size,		/* level-2 table size (if relevant) */
   unsigned int shift_width,	/* history register width */
-  unsigned int xor);	   	/* history xor address flag */
+  unsigned int xor,             /* history xor address flag */
+  unsigned int sel_size,      /* num of 2-bit selector entires */
+  unsigned int global_regsize, /* size of global branch history reg */
+  unsigned int local_htb_size, /* size of the history table */
+  unsigned int local_hrsize,   /* size of each local branch register */
+  unsigned int optional);      /* optional */	   	
 
 /* print branch predictor configuration */
 void

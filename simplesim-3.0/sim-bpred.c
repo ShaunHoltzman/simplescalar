@@ -79,7 +79,7 @@ static struct mem_t *mem = NULL;
 /* maximum number of inst's to execute */
 static unsigned int max_insts;
 
-/* branch predictor type {nottaken|taken|perfect|bimod|2lev} */
+/* branch predictor type {nottaken|taken|BTFN|perfect|bimod|2lev|tournament} */
 static char *pred_type;
 
 /* bimodal predictor config (<table_size>) */
@@ -91,6 +91,11 @@ static int bimod_config[1] =
 static int twolev_nelt = 4;
 static int twolev_config[4] =
   { /* l1size */1, /* l2size */1024, /* hist */8, /* xor */FALSE};
+
+/* tournament predictor config (<sel_size> <global_regsize> <local_htb_size> <local_hrsize> <optional>) */
+static int tourn_nelt = 5;
+static int tourn_config[5] =
+  { /* sel_size */4096, /* global_regsize */12, /* local_htb_size */1024, /* local_hrsize */10, 0};
 
 /* combining predictor config (<meta_table_size> */
 static int comb_nelt = 1;
@@ -146,7 +151,7 @@ sim_reg_options(struct opt_odb_t *odb)
 	       /* print */TRUE, /* format */NULL);
 
   opt_reg_string(odb, "-bpred",
-		 "branch predictor type {nottaken|taken|bimod|2lev|comb}",
+		 "branch predictor type {nottaken|taken|BTFN|bimod|2lev|comb}",
                  &pred_type, /* default */"bimod",
                  /* print */TRUE, /* format */NULL);
 
@@ -161,6 +166,13 @@ sim_reg_options(struct opt_odb_t *odb)
 		   "(<l1size> <l2size> <hist_size> <xor>)",
                    twolev_config, twolev_nelt, &twolev_nelt,
 		   /* default */twolev_config,
+                   /* print */TRUE, /* format */NULL, /* !accrue */FALSE);
+
+  opt_reg_int_list(odb, "-bpred:tourn",
+                   "tournament predictor config "
+		   "(<sel_size> <global_regsize> <local_htb_size> <local_hrsize> <optional>)",
+                   tourn_config, tourn_nelt, &tourn_nelt,
+                   /* default */tourn_config,
                    /* print */TRUE, /* format */NULL, /* !accrue */FALSE);
 
   opt_reg_int_list(odb, "-bpred:comb",
@@ -188,12 +200,17 @@ sim_check_options(struct opt_odb_t *odb, int argc, char **argv)
   if (!mystricmp(pred_type, "taken"))
     {
       /* static predictor, not taken */
-      pred = bpred_create(BPredTaken, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+      pred = bpred_create(BPredTaken, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
   else if (!mystricmp(pred_type, "nottaken"))
     {
       /* static predictor, taken */
-      pred = bpred_create(BPredNotTaken, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+      pred = bpred_create(BPredNotTaken, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
+  else if (!mystricmp(pred_type, "btfn"))
+    {
+      /* static predictor, taken */
+      pred = bpred_create(BPredBTFN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
   else if (!mystricmp(pred_type, "bimod"))
     {
@@ -212,7 +229,12 @@ sim_check_options(struct opt_odb_t *odb, int argc, char **argv)
 			  /* history xor address */0,
 			  /* btb sets */btb_config[0],
 			  /* btb assoc */btb_config[1],
-			  /* ret-addr stack size */ras_size);
+			  /* ret-addr stack size */ras_size,
+                          /* sel_size */0,
+                          /* global_regsize */0,
+                          /* local_htb_size */0,
+                          /* local_hrsize */0,
+                          /* optional */ 0);
     }
   else if (!mystricmp(pred_type, "2lev"))
     {
@@ -231,7 +253,36 @@ sim_check_options(struct opt_odb_t *odb, int argc, char **argv)
 			  /* history xor address */twolev_config[3],
 			  /* btb sets */btb_config[0],
 			  /* btb assoc */btb_config[1],
-			  /* ret-addr stack size */ras_size);
+			  /* ret-addr stack size */ras_size,
+                          /* sel_size */0,
+                          /* global_regsize */0,
+                          /* local_htb_size */0,
+                          /* local_hrsize */0,
+                          /* optional */ 0);
+    }
+  else if (!mystricmp(pred_type, "tourn"))
+    {
+      /* tournament predictor, bpred_create() checs args */
+      if(tourn_nelt != 5)
+        fatal("bad tournament pred config (<sel_size> <global_regsize> <local_htb_size> <local_hrsize> <optional)");
+      if (btb_nelt != 2)
+	fatal("bad btb config (<num_sets> <associativity>)");
+      
+      pred = bpred_create(BPredTourn, 
+                          /* bimod table size */0,
+                          /* 2lev l1 size */0,
+			  /* 2lev l2 size */0,
+                          /* meta table size */0,
+			  /* history reg size */0,
+			  /* history xor address */0,
+			  /* btb sets */btb_config[0],
+			  /* btb assoc */btb_config[1],
+			  /* ret-addr stack size */ras_size,
+                          /* sel_size */tourn_config[0],
+                          /* global_regsize */tourn_config[1],
+                          /* local_htb_size */tourn_config[2],
+                          /* local_hrsize */tourn_config[3],
+                          /* optional */tourn_config[4]); 
     }
   else if (!mystricmp(pred_type, "comb"))
     {
@@ -254,7 +305,12 @@ sim_check_options(struct opt_odb_t *odb, int argc, char **argv)
 			  /* history xor address */twolev_config[3],
 			  /* btb sets */btb_config[0],
 			  /* btb assoc */btb_config[1],
-			  /* ret-addr stack size */ras_size);
+			  /* ret-addr stack size */ras_size,
+                          /* sel_size */0,
+                          /* global_regsize */0,
+                          /* local_htb_size */0,
+                          /* local_hrsize */0,
+                          /* optional */ 0);
     }
   else
     fatal("cannot parse predictor type `%s'", pred_type);

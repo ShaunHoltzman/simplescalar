@@ -903,12 +903,17 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
   else if (!mystricmp(pred_type, "taken"))
     {
       /* static predictor, not taken */
-      pred = bpred_create(BPredTaken, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+      pred = bpred_create(BPredTaken, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
   else if (!mystricmp(pred_type, "nottaken"))
     {
       /* static predictor, taken */
-      pred = bpred_create(BPredNotTaken, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+      pred = bpred_create(BPredNotTaken, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
+  else if (!mystricmp(pred_type, "btfn"))
+    {
+      /* static predictor, BTFN */
+      pred = bpred_create(BPredBTFN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
   else if (!mystricmp(pred_type, "bimod"))
     {
@@ -928,7 +933,12 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
 			  /* history xor address */0,
 			  /* btb sets */btb_config[0],
 			  /* btb assoc */btb_config[1],
-			  /* ret-addr stack size */ras_size);
+			  /* ret-addr stack size */ras_size,
+                          /* sel_size */0,
+                          /* global_regsize */0,
+                          /* local_htb_size */0,
+                          /* local_hrsize */0,
+                          /* optional */ 0);
     }
   else if (!mystricmp(pred_type, "2lev"))
     {
@@ -947,7 +957,12 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
 			  /* history xor address */twolev_config[3],
 			  /* btb sets */btb_config[0],
 			  /* btb assoc */btb_config[1],
-			  /* ret-addr stack size */ras_size);
+			  /* ret-addr stack size */ras_size,
+                          /* sel_size */0,
+                          /* global_regsize */0,
+                          /* local_htb_size */0,
+                          /* local_hrsize */0,
+                          /* optional */ 0);
     }
   else if (!mystricmp(pred_type, "comb"))
     {
@@ -970,7 +985,12 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
 			  /* history xor address */twolev_config[3],
 			  /* btb sets */btb_config[0],
 			  /* btb assoc */btb_config[1],
-			  /* ret-addr stack size */ras_size);
+			  /* ret-addr stack size */ras_size,
+                          /* sel_size */0,
+                          /* global_regsize */0,
+                          /* local_htb_size */0,
+                          /* local_hrsize */0,
+                          /* optional */ 0);
     }
   else
     fatal("cannot parse predictor type `%s'", pred_type);
