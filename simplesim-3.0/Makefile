@@ -279,7 +279,7 @@ CFLAGS = $(MFLAGS) $(FFLAGS) $(OFLAGS) $(BINUTILS_INC) $(BINUTILS_LIB)
 #
 SRCS =	main.c sim-fast.c sim-safe.c sim-cache.c sim-profile.c \
 	sim-eio.c sim-bpred.c sim-cheetah.c sim-outorder.c \
-	memory.c regs.c cache.c bpred.c ptrace.c eventq.c \
+	memory.c regs.c cache.c bpred_BTB.c ptrace.c eventq.c \
 	resource.c endian.c dlite.c symbol.c eval.c options.c range.c \
 	eio.c stats.c endian.c misc.c \
 	target-pisa/pisa.c target-pisa/loader.c target-pisa/syscall.c \
