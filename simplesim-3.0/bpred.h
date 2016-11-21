@@ -109,6 +109,7 @@ enum bpred_class {
   BPredGlobal,
   BPredLocal,
   BPredSel,
+  BPredPerc,
   BPred_NUM
 };
 
@@ -152,6 +153,15 @@ struct bpred_dir_t {
       int sel_size; /* selector size, num of 2-bit selector entries */
       unsigned char *sel_table; /* selector prediction state table */
     } selector;
+    struct {
+      int index_weight; /* number of weight indexes */
+      int bits_weight;  /* bits per weight (8 bits) */
+      int bhist_len;    /* history length for global history shift reg */
+      int output;       /* output for each lookup to use in update */ 
+      signed int weights[500][500]; /* each entry is an array of weights */
+      signed int masks[100]; /* table of global branch hist reg, used for dot product with weights in lookup */
+      int index; /* index = (baddr>>2) % (weight_index size) */
+    } perceptron;
   } config;
 };
 
