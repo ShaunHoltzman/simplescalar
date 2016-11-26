@@ -132,6 +132,7 @@ bpred_create(enum bpred_class class,	/* type of predictor to create */
 
   case BPredTaken:
   case BPredBTFN:
+  case BPredFTBN:
   case BPredNotTaken:
     /* no other state */
     break;
@@ -232,6 +233,7 @@ bpred_create(enum bpred_class class,	/* type of predictor to create */
     }
   case BPredTaken:
   case BPredBTFN:
+  case BPredFTBN:
   case BPredNotTaken:
     /* no other state */
     break;
@@ -451,6 +453,7 @@ bpred_dir_create (
 
   case BPredTaken:
   case BPredBTFN:
+  case BPredFTBN:
   case BPredNotTaken:
     /* no other state */
     break;
@@ -509,6 +512,10 @@ bpred_dir_config(
   
   case BPredBTFN:
     fprintf(stream, "pred_dir: %s: predict BTFN\n", name);
+    break;
+  
+  case BPredFTBN:
+    fprintf(stream, "pred_dir: %s: predict FTBN\n", name);
     break;
 
   case BPredNotTaken:
@@ -572,6 +579,10 @@ bpred_config(struct bpred_t *pred,	/* branch predictor instance */
     bpred_dir_config (pred->dirpred.bimod, "BTFN", stream);
     break;
 
+  case BPredFTBN:
+    bpred_dir_config (pred->dirpred.bimod, "BTFN", stream);
+    break;
+
   case BPredNotTaken:
     bpred_dir_config (pred->dirpred.bimod, "nottaken", stream);
     break;
@@ -622,6 +633,9 @@ bpred_reg_stats(struct bpred_t *pred,	/* branch predictor instance */
       break;
     case BPredBTFN:
       name = "bpred_btfn";
+      break;
+    case BPredFTBN:
+      name = "bpred_ftbn";
       break;
     case BPredNotTaken:
       name = "bpred_nottaken";
@@ -869,6 +883,7 @@ bpred_dir_lookup(struct bpred_dir_t *pred_dir,	/* branch dir predictor inst */
 
     case BPredTaken:
     case BPredBTFN:
+    case BPredFTBN:
     case BPredNotTaken:
       break;
     default:
@@ -988,6 +1003,18 @@ bpred_lookup(struct bpred_t *pred,	/* branch predictor instance */
       else
       {
         return btarget;
+      }
+    case BPredFTBN:
+      if ((MD_OP_FLAGS(op) & (F_CTRL|F_UNCOND)) != (F_CTRL|F_UNCOND))
+      {
+	if (baddr < btarget)
+	  {
+	    return btarget;
+	  }
+	else
+	  {
+	    return baddr + sizeof(md_inst_t);
+	  }
       }
     case BPredNotTaken:
       if ((MD_OP_FLAGS(op) & (F_CTRL|F_UNCOND)) != (F_CTRL|F_UNCOND))
@@ -1204,7 +1231,7 @@ bpred_update(struct bpred_t *pred,	/* branch predictor instance */
     }
 
   /* Can exit now if this is a stateless predictor */
-  if (pred->class == BPredNotTaken || pred->class == BPredTaken || pred->class == BPredBTFN)
+  if (pred->class == BPredNotTaken || pred->class == BPredTaken || pred->class == BPredBTFN || pred->class == BPredFTBN)
     return;
 
   /* 

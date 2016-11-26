@@ -105,6 +105,7 @@ enum bpred_class {
   BPredTaken,			/* static predict taken */
   BPredNotTaken,		/* static predict not taken */
   BPredBTFN,			/* Branch Forward Not Taken */
+  BPredFTBN,			/* Branch Backward Not Taken */
   BPredTourn,                   /* Tournament branch predictor */
   BPredGlobal,
   BPredLocal,
