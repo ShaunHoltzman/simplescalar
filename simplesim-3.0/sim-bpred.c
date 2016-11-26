@@ -87,6 +87,11 @@ static int bimod_nelt = 1;
 static int bimod_config[1] =
   { /* bimod tbl size */2048 };
 
+/* perceptron predictor config (<l1size> <l2size> <shift_width>) */
+static int perc_nelt = 3;
+static int perc_config[3] =
+  { /* index weight size */128, /* Num of bhist bits */8, /* hist */27};
+
 /* 2-level predictor config (<l1size> <l2size> <hist_size> <xor>) */
 static int twolev_nelt = 4;
 static int twolev_config[4] =
@@ -160,6 +165,13 @@ sim_reg_options(struct opt_odb_t *odb)
 		   bimod_config, bimod_nelt, &bimod_nelt,
 		   /* default */bimod_config,
 		   /* print */TRUE, /* format */NULL, /* !accrue */FALSE);
+
+  opt_reg_int_list(odb, "-bpred:perc",
+                   "perceptron predictor config (<table size>)",
+                   perc_config, perc_nelt, &perc_nelt,
+                   /* default */perc_config,
+                   /* print */TRUE, /* format */NULL, /* !accrue */FALSE);
+
 
   opt_reg_int_list(odb, "-bpred:2lev",
                    "2-level predictor config "
@@ -236,6 +248,24 @@ sim_check_options(struct opt_odb_t *odb, int argc, char **argv)
                           /* local_hrsize */0,
                           /* optional */ 0);
     }
+  else if (!mystricmp(pred_type, "perc"))
+  {   printf("here\n");
+      pred = bpred_create(BPredPerc,
+                          /* bimod table size */0,
+                          /* 2lev l1 size */perc_config[0],
+                          /* 2lev l2 size */perc_config[1],
+                          /* meta table size */0,
+                          /* history reg size */perc_config[2],
+                          /* history xor address */0,
+                          /* btb sets */btb_config[0],
+                          /* btb assoc */btb_config[1],
+                          /* ret-addr stack size */ras_size,
+                          /* sel_size */0,
+                          /* global_regsize */0,
+                          /* local_htb_size */0,
+                          /* local_hrsize */0,
+                          /* optional */ 0);
+  }
   else if (!mystricmp(pred_type, "2lev"))
     {
       /* 2-level adaptive predictor, bpred_create() checks args */

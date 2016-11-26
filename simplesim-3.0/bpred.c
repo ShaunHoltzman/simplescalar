@@ -120,7 +120,12 @@ bpred_create(enum bpred_class class,	/* type of predictor to create */
       bpred_dir_create(class, l1size, l2size, shift_width, xor, 0, 0, 0, 0, 0);
 
     break;
-
+  
+  case BPredPerc:
+    pred->dirpred.bimod =
+      bpred_dir_create(class, l1size, l2size, shift_width, 0, 0, 0, 0, 0, 0);
+   
+    break;
   case BPred2bit:
     pred->dirpred.bimod = 
       bpred_dir_create(class, bimod_size, 0, 0, 0, 0, 0, 0, 0, 0);
@@ -140,6 +145,8 @@ bpred_create(enum bpred_class class,	/* type of predictor to create */
   case BPredComb:
   case BPred2Level:
   case BPred2bit:
+  
+  case BPredPerc:
     {
       int i;
 
@@ -410,6 +417,38 @@ bpred_dir_create (
 
     break;
 
+  case BPredPerc:
+    printf("l1size = %d, l2size = %d, shift_width = %d\n", l1size, l2size, shift_width);
+    if (!l1size)
+      fatal("number of perceptrons, '%d', must be positive and non-zero", l1size);
+    if (!l2size)
+      fatal("number of perceptrons, '%d', must be positive and non-zero", l2size);
+    if (!shift_width)
+      fatal("shift register width, '%d', must be positive and non-zero", shift_width);
+
+    pred_dir->config.perceptron.index_weight = l1size;
+    pred_dir->config.perceptron.bits_weight = l2size;
+    pred_dir->config.perceptron.bhist_len = shift_width;
+
+    int i, j;
+
+  /* Initialize weight table to all 0's and global bhist reg (masks) to all 1's */
+
+    for (i = 0; i < pred_dir->config.perceptron.index; i++)
+    {
+      for(j = 0; j < pred_dir->config.perceptron.bhist_len; j++)
+      {
+        pred_dir->config.perceptron.weights[i][j] = 0;
+      }
+    }
+
+   for(cnt = 0; cnt < pred_dir->config.perceptron.bhist_len; cnt++)
+   {
+     pred_dir->config.perceptron.masks[cnt] = 1;
+   }
+
+  break;
+
   case BPredTaken:
   case BPredBTFN:
   case BPredNotTaken:
@@ -456,6 +495,12 @@ bpred_dir_config(
   case BPred2bit:
     fprintf(stream, "pred_dir: %s: 2-bit: %d entries, direct-mapped\n",
       name, pred_dir->config.bimod.size);
+    break;
+
+  case BPredPerc:
+    fprintf(stream, "pred_dir: %s: %d perceptrons, %d weight_bits, %d history\n",
+      name, pred_dir->config.perceptron.index_weight, pred_dir->config.perceptron.bits_weight,
+      pred_dir->config.perceptron.bhist_len);
     break;
 
   case BPredTaken:
@@ -513,6 +558,13 @@ bpred_config(struct bpred_t *pred,	/* branch predictor instance */
     fprintf(stream, "ret_stack: %d entries", pred->retstack.size);
     break;
 
+  case BPredPerc:
+    bpred_dir_config (pred->dirpred.bimod, "perceptron", stream);
+    fprintf(stream, "btb: %d sets x %d associativity",
+            pred->btb.sets, pred->btb.assoc);
+    fprintf(stream, "ret_stack: %d entries", pred->retstack.size);
+    break;
+
   case BPredTaken:
     bpred_dir_config (pred->dirpred.bimod, "taken", stream);
     break;
@@ -561,6 +613,9 @@ bpred_reg_stats(struct bpred_t *pred,	/* branch predictor instance */
       break;
     case BPred2bit:
       name = "bpred_bimod";
+      break;
+    case BPredPerc:
+      name = "bpred_perceptron";
       break;
     case BPredTaken:
       name = "bpred_taken";
@@ -781,6 +836,37 @@ bpred_dir_lookup(struct bpred_dir_t *pred_dir,	/* branch dir predictor inst */
     case BPred2bit:
       p = &pred_dir->config.bimod.table[BIMOD_HASH(pred_dir, baddr)];
       break;
+    case BPredPerc:
+    {
+      int i, index;
+      signed int sum = 0;
+      signed int product[100];
+      signed int output = 0;
+      int *entry;
+
+      product[0] = 0;
+      index = (baddr >> MD_BR_SHIFT) % pred_dir->config.perceptron.index_weight;
+      pred_dir->config.perceptron.index = index;
+
+      /* From paper: set 0th bit of bhist = 1 always to provide a bias */
+      pred_dir->config.perceptron.masks[0] = 1;
+
+      /* Calculate y_out. y_out = w[0] + sum(w[i]*x[i]) */
+ 
+      for (i = 0; i < pred_dir->config.perceptron.bhist_len; i++)
+      {
+        product[i] = (pred_dir->config.perceptron.weights[index][i]) * (pred_dir->config.perceptron.masks[i]);
+        output += product[i];
+      }
+
+      /* get pointers to perceptron and its weights */
+    
+      pred_dir->config.perceptron.output = output;
+      p = &pred_dir->config.perceptron.weights[index][i] ;
+    
+    }
+    break;
+
     case BPredTaken:
     case BPredBTFN:
     case BPredNotTaken:
@@ -878,6 +964,7 @@ bpred_lookup(struct bpred_t *pred,	/* branch predictor instance */
 	}
       break;
     case BPred2bit:
+    case BPredPerc:
       if ((MD_OP_FLAGS(op) & (F_CTRL|F_UNCOND)) != (F_CTRL|F_UNCOND))
 	{
 	  dir_update_ptr->pdir1 =
@@ -1264,6 +1351,74 @@ bpred_update(struct bpred_t *pred,	/* branch predictor instance */
   {
     if (dir_update_ptr->pdir1)
       {
+     if(pred->class == BPredPerc)
+     {
+       int i;
+       int theta;
+       signed int t;
+       signed int x[200];
+       int index = pred->dirpred.bimod->config.perceptron.index;
+       int output = pred->dirpred.bimod->config.perceptron.output;
+       theta = 1.93*(pred->dirpred.bimod->config.perceptron.bhist_len) + 14;
+
+       if(taken)
+       {
+         t = 1;
+       }
+       else
+       {
+         t = -1;
+       }
+
+       if(output < 0)
+       {
+         output = (-1)*output;
+       }
+
+       if(output <= theta || (output < 0 && t > 0) || (output >= 0 && t < 0))
+       {
+
+         for(i = 0; i < pred->dirpred.bimod->config.perceptron.bhist_len; i++)
+         {
+           if(pred->dirpred.bimod->config.perceptron.masks[i] == 0)
+           {
+             x[i] = -1;
+           }
+           else
+           {
+             x[i] = 1;
+           }
+           
+           if(t == x[i])
+           {
+             pred->dirpred.bimod->config.perceptron.weights[index][i]++;
+           }
+           else
+           {
+             pred->dirpred.bimod->config.perceptron.weights[index][i]--;
+           }
+           
+           if(pred->dirpred.bimod->config.perceptron.weights[index][i] > 127)
+           {
+             pred->dirpred.bimod->config.perceptron.weights[index][i] = 127;
+           }
+
+           if(pred->dirpred.bimod->config.perceptron.weights[index][i] < -128)
+           {
+             pred->dirpred.bimod->config.perceptron.weights[index][i] = -128;
+           }
+         }
+
+          for(i = 1; i < pred->dirpred.bimod->config.perceptron.bhist_len; i++)
+          {
+            pred->dirpred.bimod->config.perceptron.masks[i-1] = pred->dirpred.bimod->config.perceptron.masks[i];
+          }
+
+          pred->dirpred.bimod->config.perceptron.masks[pred->dirpred.bimod->config.perceptron.bhist_len-1];
+
+       }
+     }
+      
         if (taken)
 	  {
 	    if (*dir_update_ptr->pdir1 < 3)
@@ -1326,14 +1481,14 @@ bpred_update(struct bpred_t *pred,	/* branch predictor instance */
         local_right = 1;
       else
         local_right = 0;
-    
+      
       if (global_right&&(!local_right))
-      {
+      { /* global predictor was correct */
         if (*dir_update_ptr->sel_dir < 3)
 	  ++*dir_update_ptr->sel_dir;
       }
       else if ((!global_right)&&local_right)
-      {
+      { /* local predictor was correct */
         if (*dir_update_ptr->sel_dir > 0)
 	  --*dir_update_ptr->sel_dir;
       }
